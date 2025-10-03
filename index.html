@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard Google Sheets + Filter & Ekspor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Library untuk ekspor -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+  <h2>Dashboard Data dari Google Sheets</h2>
+
+  <label for="filterKec">Pilih Kecamatan:</label>
+  <select id="filterKec"><option value="ALL">Semua Kecamatan</option></select>
+
+  <label for="filterJenjang">Pilih Jenjang:</label>
+  <select id="filterJenjang"><option value="ALL">Semua Jenjang</option></select>
+
+  <label for="filterStatus">Pilih Status:</label>
+  <select id="filterStatus"><option value="ALL">Semua Status</option></select>
+
+  <div style="margin:10px 0;">
+    <button id="exportExcel">Ekspor ke Excel</button>
+    <button id="exportPDF">Ekspor ke PDF</button>
+  </div>
+
+  <canvas id="barChart" width="400" height="200"></canvas>
+  <canvas id="pieChart" width="400" height="200"></canvas>
+
+  <h3>Tabel Ringkasan</h3>
+  <table border="1" id="dataTable"></table>
+
+  <script>
+    const sheetId = "1A181-886b4zZZkP46AoIaalOTwBFtuXm2do1s2ui2F4";
+    const apiKey = "AIzaSyAT2WG4qREmG2YB1jomTl4tSYntVX7iC4c";
+    const range = "Sheet1!A:F";
+
+    let allRows = [];
+    let headers = [];
+    let barChart, pieChart;
+
+    async function loadData() {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const rows = data.values;
+
+      headers = rows[0];
+      allRows = rows.slice(1);
+
+      const kecIndex = headers.indexOf("Kecamatan");
+      const jenjangIndex = headers.indexOf("Jenjang");
+      const statusIndex = headers.indexOf("Status");
+
+      // isi dropdown
+      const kecamatanSet = new Set(allRows.map(r => r[kecIndex]));
+      const jenjangSet = new Set(allRows.map(r => r[jenjangIndex]));
+      const statusSet = new Set(allRows.map(r => r[statusIndex]));
+
+      const selectKec = document.getElementById("filterKec");
+      kecamatanSet.forEach(kec => { let opt=document.createElement("option"); opt.value=kec; opt.textContent=kec; selectKec.appendChild(opt); });
+
+      const selectJen = document.getElementById("filterJenjang");
+      jenjangSet.forEach(jen => { let opt=document.createElement("option"); opt.value=jen; opt.textContent=jen; selectJen.appendChild(opt); });
+
+      const selectStatus = document.getElementById("filterStatus");
+      statusSet.forEach(st => { let opt=document.createElement("option"); opt.value=st; opt.textContent=st; selectStatus.appendChild(opt); });
+
+      renderDashboard("ALL","ALL","ALL");
+    }
+
+    function renderDashboard(filterKec, filterJen, filterStatus) {
+      const kecIndex = headers.indexOf("Kecamatan");
+      const jenjangIndex = headers.indexOf("Jenjang");
+      const statusIndex = headers.indexOf("Status");
+      const jumlahIndex = headers.indexOf("JUMLAH BARANG");
+
+      // filter data
+      let body = allRows;
+      if (filterKec !== "ALL") body = body.filter(r => r[kecIndex] === filterKec);
+      if (filterJen !== "ALL") body = body.filter(r => r[jenjangIndex] === filterJen);
+      if (filterStatus !== "ALL") body = body.filter(r => r[statusIndex] === filterStatus);
+
+      // render tabel
+      const table = document.getElementById("dataTable");
+      table.innerHTML = "<tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr>";
+      body.forEach(r=>{
+        table.innerHTML += "<tr>" + r.map(c=>`<td>${c}</td>`).join("") + "</tr>";
+      });
+
+      // agregasi jumlah barang per kecamatan
+      const aggKec = {};
+      body.forEach(r=>{
+        const kec = r[kecIndex];
+        const val = parseInt(r[jumlahIndex]) || 0;
+        aggKec[kec] = (aggKec[kec]||0) + val;
+      });
+
+      // agregasi jumlah barang per jenjang
+      const aggJenjang = {};
+      body.forEach(r=>{
+        const jen = r[jenjangIndex];
+        const val = parseInt(r[jumlahIndex]) || 0;
+        aggJenjang[jen] = (aggJenjang[jen]||0) + val;
+      });
+
+      const labelsKec = Object.keys(aggKec);
+      const valuesKec = Object.values(aggKec);
+      const labelsJen = Object.keys(aggJenjang);
+      const valuesJen = Object.values(aggJenjang);
+
+      // update chart
+      if (barChart) barChart.destroy();
+      if (pieChart) pieChart.destroy();
+
+      barChart = new Chart(document.getElementById("barChart"), {
+        type: 'bar',
+        data: { labels: labelsKec, datasets: [{ label: 'Jumlah Barang', data: valuesKec, backgroundColor: 'steelblue' }] },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+      });
+
+      pieChart = new Chart(document.getElementById("pieChart"), {
+        type: 'pie',
+        data: { labels: labelsJen, datasets: [{ data: valuesJen, backgroundColor: ['red','green','blue','orange','purple','teal'] }] }
+      });
+    }
+
+    // event filter
+    document.getElementById("filterKec").addEventListener("change", e=>{
+      renderDashboard(e.target.value, document.getElementById("filterJenjang").value, document.getElementById("filterStatus").value);
+    });
+    document.getElementById("filterJenjang").addEventListener("change", e=>{
+      renderDashboard(document.getElementById("filterKec").value, e.target.value, document.getElementById("filterStatus").value);
+    });
+    document.getElementById("filterStatus").addEventListener("change", e=>{
+      renderDashboard(document.getElementById("filterKec").value, document.getElementById("filterJenjang").value, e.target.value);
+    });
+
+    // ekspor Excel
+    document.getElementById("exportExcel").addEventListener("click", ()=>{
+      const table = document.getElementById("dataTable");
+      const wb = XLSX.utils.table_to_book(table, {sheet:"Data"});
+      XLSX.writeFile(wb, "dashboard.xlsx");
+    });
+
+    // ekspor PDF
+    document.getElementById("exportPDF").addEventListener("click", ()=>{
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Ringkasan Data", 14, 15);
+      doc.autoTable({ html: '#dataTable', startY: 20 });
+      doc.save("dashboard.pdf");
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
