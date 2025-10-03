@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -49,7 +48,7 @@
     <!-- Chart Section -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
       <div class="bg-gray-50 p-4 rounded-lg shadow">
-        <h3 class="text-center font-semibold mb-2">Jumlah Barang per Kecamatan</h3>
+        <h3 class="text-center font-semibold mb-2">Jumlah Barang & Nilai Perolehan per Kecamatan</h3>
         <div class="flex justify-center">
           <canvas id="barChart" class="max-w-md w-full h-64"></canvas>
         </div>
@@ -58,22 +57,6 @@
         <h3 class="text-center font-semibold mb-2">Jumlah Barang per Jenjang</h3>
         <div class="flex justify-center">
           <canvas id="pieChart" class="max-w-md w-full h-64"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Chart Nilai Perolehan -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-      <div class="bg-gray-50 p-4 rounded-lg shadow">
-        <h3 class="text-center font-semibold mb-2">💰 Nilai Perolehan per Kecamatan</h3>
-        <div class="flex justify-center">
-          <canvas id="barChartNilai" class="max-w-md w-full h-64"></canvas>
-        </div>
-      </div>
-      <div class="bg-gray-50 p-4 rounded-lg shadow">
-        <h3 class="text-center font-semibold mb-2">💰 Nilai Perolehan per Jenjang</h3>
-        <div class="flex justify-center">
-          <canvas id="pieChartNilai" class="max-w-md w-full h-64"></canvas>
         </div>
       </div>
     </div>
@@ -108,7 +91,7 @@
     let allRows = [];
     let headers = [];
     let filteredRows = [];
-    let barChart, pieChart, barChartNilai, pieChartNilai;
+    let barChart, pieChart;
 
     let currentPage = 1;
     let rowsPerPage = 10;
@@ -152,7 +135,7 @@
       const jenjangIndex = headers.indexOf("Jenjang");
       const statusIndex = headers.indexOf("Status");
       const jumlahIndex = headers.indexOf("JUMLAH BARANG");
-      const nilaiIndex = headers.indexOf("NILAI PEROLEHAN");
+      const nilaiIndex = headers.indexOf("E-BMD"); // kolom E-BMD
 
       // filter data
       filteredRows = allRows.filter(r=>{
@@ -170,65 +153,91 @@
       }
 
       renderTable();
-      
-      // agregasi jumlah barang per kecamatan
-      const aggKec = {};
-      const aggNilaiKec = {};
+
+      // agregasi jumlah barang & nilai perolehan per kecamatan
+      const aggKecBarang = {};
+      const aggKecNilai = {};
       filteredRows.forEach(r=>{
         const kec = r[kecIndex];
         const jumlah = parseInt(r[jumlahIndex]) || 0;
         const nilai = parseFloat(r[nilaiIndex]) || 0;
-        aggKec[kec] = (aggKec[kec]||0) + jumlah;
-        aggNilaiKec[kec] = (aggNilaiKec[kec]||0) + nilai;
+        aggKecBarang[kec] = (aggKecBarang[kec]||0) + jumlah;
+        aggKecNilai[kec] = (aggKecNilai[kec]||0) + nilai;
       });
 
       // agregasi jumlah barang per jenjang
       const aggJenjang = {};
-      const aggNilaiJenjang = {};
       filteredRows.forEach(r=>{
         const jen = r[jenjangIndex];
-        const jumlah = parseInt(r[jumlahIndex]) || 0;
-        const nilai = parseFloat(r[nilaiIndex]) || 0;
-        aggJenjang[jen] = (aggJenjang[jen]||0) + jumlah;
-        aggNilaiJenjang[jen] = (aggNilaiJenjang[jen]||0) + nilai;
+        const val = parseInt(r[jumlahIndex]) || 0;
+        aggJenjang[jen] = (aggJenjang[jen]||0) + val;
       });
 
-      const labelsKec = Object.keys(aggKec);
-      const valuesKec = Object.values(aggKec);
-      const valuesNilaiKec = Object.values(aggNilaiKec);
-
+      const labelsKec = Object.keys(aggKecBarang);
+      const valuesBarang = Object.values(aggKecBarang);
+      const valuesNilai = Object.values(aggKecNilai);
       const labelsJen = Object.keys(aggJenjang);
       const valuesJen = Object.values(aggJenjang);
-      const valuesNilaiJen = Object.values(aggNilaiJenjang);
 
-      // update chart lama
+      // update chart
       if (barChart) barChart.destroy();
       if (pieChart) pieChart.destroy();
-      if (barChartNilai) barChartNilai.destroy();
-      if (pieChartNilai) pieChartNilai.destroy();
 
+      // Bar chart dengan dual axis
       barChart = new Chart(document.getElementById("barChart"), {
         type: 'bar',
-        data: { labels: labelsKec, datasets: [{ label: 'Jumlah Barang', data: valuesKec, backgroundColor: 'steelblue' }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        data: { 
+          labels: labelsKec, 
+          datasets: [
+            { 
+              label: 'Jumlah Barang', 
+              data: valuesBarang, 
+              backgroundColor: 'steelblue',
+              yAxisID: 'y'
+            },
+            { 
+              label: 'Total Nilai Perolehan (E-BMD)', 
+              data: valuesNilai, 
+              backgroundColor: 'orange',
+              yAxisID: 'y1'
+            }
+          ] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          plugins: { legend: { display: true } },
+          scales: {
+            y: {
+              beginAtZero: true,
+              position: 'left',
+              title: { display: true, text: 'Jumlah Barang' }
+            },
+            y1: {
+              beginAtZero: true,
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              ticks: {
+                callback: function(value) {
+                  return 'Rp ' + value.toLocaleString("id-ID");
+                }
+              },
+              title: { display: true, text: 'Nilai Perolehan (Rp)' }
+            }
+          }
+        }
       });
 
+      // Pie chart jumlah barang per jenjang
       pieChart = new Chart(document.getElementById("pieChart"), {
         type: 'pie',
-        data: { labels: labelsJen, datasets: [{ data: valuesJen, backgroundColor: ['#f87171','#34d399','#60a5fa','#fbbf24','#a78bfa','#14b8a6'] }] },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-
-      // grafik nilai perolehan
-      barChartNilai = new Chart(document.getElementById("barChartNilai"), {
-        type: 'bar',
-        data: { labels: labelsKec, datasets: [{ label: 'Nilai Perolehan', data: valuesNilaiKec, backgroundColor: '#f59e0b' }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales:{ y:{ beginAtZero:true } } }
-      });
-
-      pieChartNilai = new Chart(document.getElementById("pieChartNilai"), {
-        type: 'pie',
-        data: { labels: labelsJen, datasets: [{ data: valuesNilaiJen, backgroundColor: ['#10b981','#3b82f6','#f43f5e','#facc15','#8b5cf6','#06b6d4'] }] },
+        data: { 
+          labels: labelsJen, 
+          datasets: [{ 
+            data: valuesJen, 
+            backgroundColor: ['#f87171','#34d399','#60a5fa','#fbbf24','#a78bfa','#14b8a6'] 
+          }] 
+        },
         options: { responsive: true, maintainAspectRatio: false }
       });
     }
@@ -301,4 +310,3 @@
   </script>
 </body>
 </html>
-```
