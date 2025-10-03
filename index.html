@@ -3,34 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <title>Dashboard Google Sheets + Filter & Ekspor</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Library untuk ekspor -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 </head>
-<body>
-  <h2>Dashboard Data dari Google Sheets</h2>
+<body class="bg-gray-100 p-4">
+  <div class="container mx-auto bg-white p-4 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-4 text-center">📊 Dashboard Data dari Google Sheets</h2>
 
-  <label for="filterKec">Pilih Kecamatan:</label>
-  <select id="filterKec"><option value="ALL">Semua Kecamatan</option></select>
+    <!-- Filter Section -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div>
+        <label for="filterKec" class="block text-sm font-semibold">Pilih Kecamatan:</label>
+        <select id="filterKec" class="form-select w-full"></select>
+      </div>
+      <div>
+        <label for="filterJenjang" class="block text-sm font-semibold">Pilih Jenjang:</label>
+        <select id="filterJenjang" class="form-select w-full"></select>
+      </div>
+      <div>
+        <label for="filterStatus" class="block text-sm font-semibold">Pilih Status:</label>
+        <select id="filterStatus" class="form-select w-full"></select>
+      </div>
+    </div>
 
-  <label for="filterJenjang">Pilih Jenjang:</label>
-  <select id="filterJenjang"><option value="ALL">Semua Jenjang</option></select>
+    <!-- Button Export -->
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button id="exportExcel" class="btn btn-success">Ekspor ke Excel</button>
+      <button id="exportPDF" class="btn btn-danger">Ekspor ke PDF</button>
+    </div>
 
-  <label for="filterStatus">Pilih Status:</label>
-  <select id="filterStatus"><option value="ALL">Semua Status</option></select>
+    <!-- Chart Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div class="bg-gray-50 p-4 rounded-lg shadow">
+        <h3 class="text-center font-semibold mb-2">Jumlah Barang per Kecamatan</h3>
+        <div class="flex justify-center">
+          <canvas id="barChart" class="max-w-md w-full h-64"></canvas>
+        </div>
+      </div>
+      <div class="bg-gray-50 p-4 rounded-lg shadow">
+        <h3 class="text-center font-semibold mb-2">Jumlah Barang per Jenjang</h3>
+        <div class="flex justify-center">
+          <canvas id="pieChart" class="max-w-md w-full h-64"></canvas>
+        </div>
+      </div>
+    </div>
 
-  <div style="margin:10px 0;">
-    <button id="exportExcel">Ekspor ke Excel</button>
-    <button id="exportPDF">Ekspor ke PDF</button>
+    <!-- Table Section -->
+    <h3 class="text-xl font-semibold mb-3">📋 Tabel Ringkasan</h3>
+    <div class="overflow-x-auto">
+      <table id="dataTable" class="table table-bordered table-striped text-sm w-full"></table>
+    </div>
   </div>
-
-  <canvas id="barChart" width="400" height="200"></canvas>
-  <canvas id="pieChart" width="400" height="200"></canvas>
-
-  <h3>Tabel Ringkasan</h3>
-  <table border="1" id="dataTable"></table>
 
   <script>
     const sheetId = "1A181-886b4zZZkP46AoIaalOTwBFtuXm2do1s2ui2F4";
@@ -60,13 +91,28 @@
       const statusSet = new Set(allRows.map(r => r[statusIndex]));
 
       const selectKec = document.getElementById("filterKec");
-      kecamatanSet.forEach(kec => { let opt=document.createElement("option"); opt.value=kec; opt.textContent=kec; selectKec.appendChild(opt); });
+      selectKec.innerHTML = '<option value="ALL">Semua Kecamatan</option>';
+      kecamatanSet.forEach(kec => { 
+        let opt=document.createElement("option"); 
+        opt.value=kec; opt.textContent=kec; 
+        selectKec.appendChild(opt); 
+      });
 
       const selectJen = document.getElementById("filterJenjang");
-      jenjangSet.forEach(jen => { let opt=document.createElement("option"); opt.value=jen; opt.textContent=jen; selectJen.appendChild(opt); });
+      selectJen.innerHTML = '<option value="ALL">Semua Jenjang</option>';
+      jenjangSet.forEach(jen => { 
+        let opt=document.createElement("option"); 
+        opt.value=jen; opt.textContent=jen; 
+        selectJen.appendChild(opt); 
+      });
 
       const selectStatus = document.getElementById("filterStatus");
-      statusSet.forEach(st => { let opt=document.createElement("option"); opt.value=st; opt.textContent=st; selectStatus.appendChild(opt); });
+      selectStatus.innerHTML = '<option value="ALL">Semua Status</option>';
+      statusSet.forEach(st => { 
+        let opt=document.createElement("option"); 
+        opt.value=st; opt.textContent=st; 
+        selectStatus.appendChild(opt); 
+      });
 
       renderDashboard("ALL","ALL","ALL");
     }
@@ -85,9 +131,10 @@
 
       // render tabel
       const table = document.getElementById("dataTable");
-      table.innerHTML = "<tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr>";
+      table.innerHTML = "<thead><tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr></thead><tbody></tbody>";
+      const tbody = table.querySelector("tbody");
       body.forEach(r=>{
-        table.innerHTML += "<tr>" + r.map(c=>`<td>${c}</td>`).join("") + "</tr>";
+        tbody.innerHTML += "<tr>" + r.map(c=>`<td>${c}</td>`).join("") + "</tr>";
       });
 
       // agregasi jumlah barang per kecamatan
@@ -117,13 +164,24 @@
 
       barChart = new Chart(document.getElementById("barChart"), {
         type: 'bar',
-        data: { labels: labelsKec, datasets: [{ label: 'Jumlah Barang', data: valuesKec, backgroundColor: 'steelblue' }] },
-        options: { responsive: true, plugins: { legend: { display: false } } }
+        data: { 
+          labels: labelsKec, 
+          datasets: [{ label: 'Jumlah Barang', data: valuesKec, backgroundColor: 'steelblue' }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } } 
+        }
       });
 
       pieChart = new Chart(document.getElementById("pieChart"), {
         type: 'pie',
-        data: { labels: labelsJen, datasets: [{ data: valuesJen, backgroundColor: ['red','green','blue','orange','purple','teal'] }] }
+        data: { 
+          labels: labelsJen, 
+          datasets: [{ data: valuesJen, backgroundColor: ['#f87171','#34d399','#60a5fa','#fbbf24','#a78bfa','#14b8a6'] }] 
+        },
+        options: { responsive: true, maintainAspectRatio: false }
       });
     }
 
