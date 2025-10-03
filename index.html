@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Dashboard Google Sheets + Filter & Ekspor</title>
+  <title>Dashboard Data KIB B Peralatan Dan Mesin</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Bootstrap CSS -->
@@ -16,7 +16,7 @@
 </head>
 <body class="bg-gray-100 p-4">
   <div class="container mx-auto bg-white p-4 rounded-lg shadow-md">
-    <h2 class="text-2xl font-bold mb-4 text-center">📊 Dashboard Data dari Google Sheets</h2>
+    <h2 class="text-2xl font-bold mb-4 text-center">📊 Dashboard Data KIB B Dinas Pendidikan Dan Kebudayaan</h2>
 
     <!-- Filter Section -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -32,6 +32,11 @@
         <label for="filterStatus" class="block text-sm font-semibold">Pilih Status:</label>
         <select id="filterStatus" class="form-select w-full"></select>
       </div>
+    </div>
+
+    <!-- Search -->
+    <div class="mb-4">
+      <input type="text" id="searchInput" placeholder="🔍 Cari data..." class="form-control">
     </div>
 
     <!-- Button Export -->
@@ -61,6 +66,21 @@
     <div class="overflow-x-auto">
       <table id="dataTable" class="table table-bordered table-striped text-sm w-full"></table>
     </div>
+
+    <!-- Pagination -->
+    <div class="flex justify-between items-center mt-3">
+      <div>
+        <label>Tampilkan: 
+          <select id="rowsPerPage" class="form-select d-inline-block w-auto">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+          </select> baris
+        </label>
+      </div>
+      <div id="paginationControls" class="flex gap-2"></div>
+    </div>
   </div>
 
   <script>
@@ -70,7 +90,11 @@
 
     let allRows = [];
     let headers = [];
+    let filteredRows = [];
     let barChart, pieChart;
+
+    let currentPage = 1;
+    let rowsPerPage = 10;
 
     async function loadData() {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
@@ -80,6 +104,7 @@
 
       headers = rows[0];
       allRows = rows.slice(1);
+      filteredRows = allRows;
 
       const kecIndex = headers.indexOf("Kecamatan");
       const jenjangIndex = headers.indexOf("Jenjang");
@@ -92,27 +117,15 @@
 
       const selectKec = document.getElementById("filterKec");
       selectKec.innerHTML = '<option value="ALL">Semua Kecamatan</option>';
-      kecamatanSet.forEach(kec => { 
-        let opt=document.createElement("option"); 
-        opt.value=kec; opt.textContent=kec; 
-        selectKec.appendChild(opt); 
-      });
+      kecamatanSet.forEach(kec => { let opt=document.createElement("option"); opt.value=kec; opt.textContent=kec; selectKec.appendChild(opt); });
 
       const selectJen = document.getElementById("filterJenjang");
       selectJen.innerHTML = '<option value="ALL">Semua Jenjang</option>';
-      jenjangSet.forEach(jen => { 
-        let opt=document.createElement("option"); 
-        opt.value=jen; opt.textContent=jen; 
-        selectJen.appendChild(opt); 
-      });
+      jenjangSet.forEach(jen => { let opt=document.createElement("option"); opt.value=jen; opt.textContent=jen; selectJen.appendChild(opt); });
 
       const selectStatus = document.getElementById("filterStatus");
       selectStatus.innerHTML = '<option value="ALL">Semua Status</option>';
-      statusSet.forEach(st => { 
-        let opt=document.createElement("option"); 
-        opt.value=st; opt.textContent=st; 
-        selectStatus.appendChild(opt); 
-      });
+      statusSet.forEach(st => { let opt=document.createElement("option"); opt.value=st; opt.textContent=st; selectStatus.appendChild(opt); });
 
       renderDashboard("ALL","ALL","ALL");
     }
@@ -124,22 +137,25 @@
       const jumlahIndex = headers.indexOf("JUMLAH BARANG");
 
       // filter data
-      let body = allRows;
-      if (filterKec !== "ALL") body = body.filter(r => r[kecIndex] === filterKec);
-      if (filterJen !== "ALL") body = body.filter(r => r[jenjangIndex] === filterJen);
-      if (filterStatus !== "ALL") body = body.filter(r => r[statusIndex] === filterStatus);
-
-      // render tabel
-      const table = document.getElementById("dataTable");
-      table.innerHTML = "<thead><tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr></thead><tbody></tbody>";
-      const tbody = table.querySelector("tbody");
-      body.forEach(r=>{
-        tbody.innerHTML += "<tr>" + r.map(c=>`<td>${c}</td>`).join("") + "</tr>";
+      filteredRows = allRows.filter(r=>{
+        let match = true;
+        if (filterKec !== "ALL" && r[kecIndex] !== filterKec) match = false;
+        if (filterJen !== "ALL" && r[jenjangIndex] !== filterJen) match = false;
+        if (filterStatus !== "ALL" && r[statusIndex] !== filterStatus) match = false;
+        return match;
       });
 
+      // search filter
+      const keyword = document.getElementById("searchInput").value.toLowerCase();
+      if (keyword) {
+        filteredRows = filteredRows.filter(r=> r.join(" ").toLowerCase().includes(keyword));
+      }
+
+      renderTable();
+      
       // agregasi jumlah barang per kecamatan
       const aggKec = {};
-      body.forEach(r=>{
+      filteredRows.forEach(r=>{
         const kec = r[kecIndex];
         const val = parseInt(r[jumlahIndex]) || 0;
         aggKec[kec] = (aggKec[kec]||0) + val;
@@ -147,7 +163,7 @@
 
       // agregasi jumlah barang per jenjang
       const aggJenjang = {};
-      body.forEach(r=>{
+      filteredRows.forEach(r=>{
         const jen = r[jenjangIndex];
         const val = parseInt(r[jumlahIndex]) || 0;
         aggJenjang[jen] = (aggJenjang[jen]||0) + val;
@@ -164,37 +180,64 @@
 
       barChart = new Chart(document.getElementById("barChart"), {
         type: 'bar',
-        data: { 
-          labels: labelsKec, 
-          datasets: [{ label: 'Jumlah Barang', data: valuesKec, backgroundColor: 'steelblue' }] 
-        },
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } } 
-        }
+        data: { labels: labelsKec, datasets: [{ label: 'Jumlah Barang', data: valuesKec, backgroundColor: 'steelblue' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
       });
 
       pieChart = new Chart(document.getElementById("pieChart"), {
         type: 'pie',
-        data: { 
-          labels: labelsJen, 
-          datasets: [{ data: valuesJen, backgroundColor: ['#f87171','#34d399','#60a5fa','#fbbf24','#a78bfa','#14b8a6'] }] 
-        },
+        data: { labels: labelsJen, datasets: [{ data: valuesJen, backgroundColor: ['#f87171','#34d399','#60a5fa','#fbbf24','#a78bfa','#14b8a6'] }] },
         options: { responsive: true, maintainAspectRatio: false }
       });
     }
 
-    // event filter
-    document.getElementById("filterKec").addEventListener("change", e=>{
-      renderDashboard(e.target.value, document.getElementById("filterJenjang").value, document.getElementById("filterStatus").value);
-    });
-    document.getElementById("filterJenjang").addEventListener("change", e=>{
-      renderDashboard(document.getElementById("filterKec").value, e.target.value, document.getElementById("filterStatus").value);
-    });
-    document.getElementById("filterStatus").addEventListener("change", e=>{
-      renderDashboard(document.getElementById("filterKec").value, document.getElementById("filterJenjang").value, e.target.value);
-    });
+    function renderTable() {
+      const table = document.getElementById("dataTable");
+      table.innerHTML = "<thead><tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr></thead><tbody></tbody>";
+      const tbody = table.querySelector("tbody");
+
+      rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
+      const start = (currentPage-1)*rowsPerPage;
+      const end = start+rowsPerPage;
+      const pageRows = filteredRows.slice(start,end);
+
+      pageRows.forEach(r=>{
+        tbody.innerHTML += "<tr>" + r.map(c=>`<td>${c}</td>`).join("") + "</tr>";
+      });
+
+      renderPagination();
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+      const container = document.getElementById("paginationControls");
+      container.innerHTML = "";
+
+      const prevBtn = document.createElement("button");
+      prevBtn.textContent = "« Prev";
+      prevBtn.className = "btn btn-outline-primary btn-sm";
+      prevBtn.disabled = currentPage===1;
+      prevBtn.onclick = ()=>{ currentPage--; renderTable(); };
+      container.appendChild(prevBtn);
+
+      const pageInfo = document.createElement("span");
+      pageInfo.textContent = ` Halaman ${currentPage} dari ${totalPages} `;
+      container.appendChild(pageInfo);
+
+      const nextBtn = document.createElement("button");
+      nextBtn.textContent = "Next »";
+      nextBtn.className = "btn btn-outline-primary btn-sm";
+      nextBtn.disabled = currentPage===totalPages;
+      nextBtn.onclick = ()=>{ currentPage++; renderTable(); };
+      container.appendChild(nextBtn);
+    }
+
+    // Event filter & search
+    document.getElementById("filterKec").addEventListener("change", ()=>{ currentPage=1; renderDashboard(filterKec.value, filterJenjang.value, filterStatus.value); });
+    document.getElementById("filterJenjang").addEventListener("change", ()=>{ currentPage=1; renderDashboard(filterKec.value, filterJenjang.value, filterStatus.value); });
+    document.getElementById("filterStatus").addEventListener("change", ()=>{ currentPage=1; renderDashboard(filterKec.value, filterJenjang.value, filterStatus.value); });
+    document.getElementById("searchInput").addEventListener("input", ()=>{ currentPage=1; renderDashboard(filterKec.value, filterJenjang.value, filterStatus.value); });
+    document.getElementById("rowsPerPage").addEventListener("change", ()=>{ currentPage=1; renderTable(); });
 
     // ekspor Excel
     document.getElementById("exportExcel").addEventListener("click", ()=>{
